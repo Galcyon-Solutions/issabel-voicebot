@@ -26,6 +26,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 from datetime import datetime
 
 import websockets
@@ -39,6 +40,7 @@ PORT = int(os.environ.get("MEDIA_PORT", "9001"))   # 9000 lo usa el ejemplo de g
 MODELO_OIDO = os.environ.get("DEEPGRAM_MODEL", "nova-3")        # o flux-general-multi
 VOZ = os.environ.get("DEEPGRAM_VOICE", "aura-2-celeste-es")
 IDIOMA = os.environ.get("AI_LANGUAGE", "es")
+DEPURAR = os.environ.get("DEBUG_EVENTOS", "") == "1"   # imprime el tipo de cada evento de Deepgram
 
 DEEPGRAM_URL = "wss://agent.deepgram.com/v1/agent/converse"
 
@@ -116,7 +118,7 @@ async def atender_llamada(asterisk):
         # Estado compartido entre las dos tareas
         puede_enviar = asyncio.Event()     # Asterisk avisa con XOFF/XON si su cola esta llena
         puede_enviar.set()
-        estado = {"descartar": False}      # True mientras llega voz vieja del bot ya interrumpido
+        estado = {"descartar_hasta": 0.0}  # hasta cuando se tira la voz vieja del bot ya interrumpido
 
         # 2.4 Persona -> Deepgram, y eventos de Asterisk
         async def desde_asterisk():
@@ -153,19 +155,23 @@ async def atender_llamada(asterisk):
         async def desde_deepgram():
             async for mensaje in deepgram:
                 if isinstance(mensaje, bytes):              # la voz del bot
-                    if not estado["descartar"]:
+                    if time.monotonic() >= estado["descartar_hasta"]:
                         await enviar_a_asterisk(mensaje)
                     continue
                 evento = json.loads(mensaje)
                 tipo = evento.get("type")
+                if DEPURAR:
+                    log("evento Deepgram:", tipo)
                 if tipo == "UserStartedSpeaking":
                     # La persona hablo encima: vaciar lo que Asterisk tenia en cola y
-                    # descartar la voz del bot que todavia viene en camino
-                    estado["descartar"] = True
+                    # descartar la voz del bot que todavia viene en camino. El descarte dura
+                    # solo medio segundo: si fuera una bandera que espera a AgentStartedSpeaking
+                    # y ese aviso llegara tarde o no llegara, el bot hablaria sin que nadie lo oiga.
+                    estado["descartar_hasta"] = time.monotonic() + 0.5
                     sobrante.clear()
                     await asterisk.send(json.dumps({"command": "FLUSH_MEDIA"}))
                 elif tipo == "AgentStartedSpeaking":
-                    estado["descartar"] = False             # empieza una respuesta nueva
+                    estado["descartar_hasta"] = 0.0           # empieza una respuesta nueva
                 elif tipo == "ConversationText":
                     log(f"[{evento.get('role')}] {evento.get('content')}")
                 elif tipo in ("Error", "Warning"):
