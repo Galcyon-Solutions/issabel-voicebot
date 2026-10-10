@@ -1,0 +1,12 @@
+[Unit]
+Description=galcymedia voicebot (agente de voz para Asterisk)
+After=network.target asterisk.service
+
+[Service]
+WorkingDirectory=/opt/galcymedia-agent/app
+ExecStart=/opt/galcymedia-agent/venv/bin/python -u main.py
+Restart=on-failure
+User=asterisk
+
+[Install]
+WantedBy=multi-user.target

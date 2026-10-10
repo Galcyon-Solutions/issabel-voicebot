@@ -1,0 +1,13 @@
+[Unit]
+Description=Agente de voz puro (Asterisk chan_websocket y Deepgram)
+After=network.target asterisk.service
+
+[Service]
+WorkingDirectory=/opt/agente-puro
+EnvironmentFile=/opt/agente-puro/.env
+ExecStart=/opt/agente-puro/venv/bin/python -u agente_puro.py
+Restart=on-failure
+User=asterisk
+
+[Install]
+WantedBy=multi-user.target

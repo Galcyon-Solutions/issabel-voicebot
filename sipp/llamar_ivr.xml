@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  Llamada autenticada a una extension de Issabel (por ejemplo la del voicebot, 7500).
+  SIPp habla SIP normal, NO WebSocket: marca como un telefono. El dialplan es quien hace el Dial(WebSocket/...).
+
+  Uso:
+    sipp IP_DE_LA_PBX:5060 -sf llamar_ivr.xml -s 7800 -key user 7101 -key tecla 1 -au 7101 -ap CLAVE_DE_LA_7101 -d 25000 -m 1
+      -key tecla 1    la tecla que se pulsa en el IVR (se manda como SIP INFO)
+    IMPORTANTE: la extension desde la que llamas debe aceptar DTMF por INFO (en IssabelPBX, campo dtmfmode = info
+    en la extension). Con el modo por defecto (RFC 4733, dentro del audio) esta tecla no llega: usa un softphone.
+      -s 7500         extension a marcar (el voicebot)
+      -key user 7101  desde que extension llamas (debe existir y su clave va en -ap)
+      -d 25000        cuanto dura la llamada en milisegundos (aqui 25 s)
+
+  Este escenario NO envia audio (RTP): prueba la telefonia, el canal WebSocket y la conexion con el proveedor
+  (el bot saluda y lo veras en el registro del agente). Para hablar de verdad usa un softphone o el webphone.
+-->
+<scenario name="Llamada autenticada que pulsa una tecla (IVR)">
+
+  <send retrans="500">
+    <![CDATA[
+      INVITE sip:[service]@[remote_ip]:[remote_port] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      From: "SIPp [$user]" <sip:[$user]@[local_ip]:[local_port]>;tag=[pid]SIPpTag00[call_number]
+      To: [service] <sip:[service]@[remote_ip]:[remote_port]>
+      Call-ID: [call_id]
+      CSeq: 1 INVITE
+      Contact: sip:[$user]@[local_ip]:[local_port]
+      Max-Forwards: 70
+      Subject: prueba voicebot
+      X-Cliente-Id: A-4471
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=user1 53655765 2353687637 IN IP[local_ip_type] [local_ip]
+      s=-
+      c=IN IP[media_ip_type] [media_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 8 0 101
+      a=rtpmap:8 PCMA/8000
+      a=rtpmap:0 PCMU/8000
+      a=rtpmap:101 telephone-event/8000
+      a=fmtp:101 0-15
+    ]]>
+  </send>
+
+  <recv response="100" optional="true"></recv>
+  <recv response="401" auth="true"></recv>
+
+  <send>
+    <![CDATA[
+      ACK sip:[service]@[remote_ip]:[remote_port] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      From: "SIPp [$user]" <sip:[$user]@[local_ip]:[local_port]>;tag=[pid]SIPpTag00[call_number]
+      To: [service] <sip:[service]@[remote_ip]:[remote_port]>[peer_tag_param]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <send retrans="500">
+    <![CDATA[
+      INVITE sip:[service]@[remote_ip]:[remote_port] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      From: "SIPp [$user]" <sip:[$user]@[local_ip]:[local_port]>;tag=[pid]SIPpTag00[call_number]
+      To: [service] <sip:[service]@[remote_ip]:[remote_port]>
+      Call-ID: [call_id]
+      CSeq: 2 INVITE
+      Contact: sip:[$user]@[local_ip]:[local_port]
+      Max-Forwards: 70
+      Subject: prueba voicebot
+      X-Cliente-Id: A-4471
+      [authentication]
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=user1 53655765 2353687637 IN IP[local_ip_type] [local_ip]
+      s=-
+      c=IN IP[media_ip_type] [media_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 8 0 101
+      a=rtpmap:8 PCMA/8000
+      a=rtpmap:0 PCMU/8000
+      a=rtpmap:101 telephone-event/8000
+      a=fmtp:101 0-15
+    ]]>
+  </send>
+
+  <recv response="100" optional="true"></recv>
+  <recv response="180" optional="true"></recv>
+  <recv response="183" optional="true"></recv>
+  <recv response="200" rrs="true"></recv>
+
+  <send>
+    <![CDATA[
+      ACK [next_url] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      From: "SIPp [$user]" <sip:[$user]@[local_ip]:[local_port]>;tag=[pid]SIPpTag00[call_number]
+      To: [service] <sip:[service]@[remote_ip]:[remote_port]>[peer_tag_param]
+      Call-ID: [call_id]
+      CSeq: 2 ACK
+      [routes]
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <!-- Espera a que el IVR termine de hablar (aqui 3 s) y pulsa la tecla -key tecla N, como SIP INFO -->
+  <pause milliseconds="3000"/>
+
+  <send retrans="500">
+    <![CDATA[
+      INFO [next_url] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      From: "SIPp [$user]" <sip:[$user]@[local_ip]:[local_port]>;tag=[pid]SIPpTag00[call_number]
+      To: [service] <sip:[service]@[remote_ip]:[remote_port]>[peer_tag_param]
+      Call-ID: [call_id]
+      CSeq: [cseq] INFO
+      [routes]
+      Max-Forwards: 70
+      Content-Type: application/dtmf-relay
+      Content-Length: [len]
+
+      Signal=[$tecla]
+      Duration=160
+    ]]>
+  </send>
+
+  <recv response="200"></recv>
+
+  <!-- La llamada dura lo que diga -d (milisegundos). Si el bot cuelga antes, SIPp lo registra y termina. -->
+  <pause/>
+
+  <send retrans="500">
+    <![CDATA[
+      BYE [next_url] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      From: "SIPp [$user]" <sip:[$user]@[local_ip]:[local_port]>;tag=[pid]SIPpTag00[call_number]
+      To: [service] <sip:[service]@[remote_ip]:[remote_port]>[peer_tag_param]
+      Call-ID: [call_id]
+      CSeq: [cseq] BYE
+      [routes]
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" crlf="true"></recv>
+
+</scenario>
