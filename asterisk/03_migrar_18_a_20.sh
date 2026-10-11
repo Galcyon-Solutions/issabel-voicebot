@@ -55,7 +55,9 @@ systemctl daemon-reload; systemctl restart asterisk; sleep 15
 asterisk -rx 'core show version'
 EJEC=$(asterisk -rx 'core show version' | awk '{print $2}'); INST=$(rpm -q asterisk20 --qf '%{VERSION}')
 [ "$EJEC" = "$INST" ] && echo "OK: ejecutando $EJEC (igual al paquete instalado)" || echo "ATENCION: ejecutando $EJEC pero instalado $INST. Reinicia: systemctl restart asterisk"
-AORS=$(asterisk -rx 'pjsip show aors' 2>/dev/null | awk '/Objects found/{print $3}'); ENDP=$(asterisk -rx 'pjsip show endpoints' 2>/dev/null | grep -c 'Endpoint: ')
+# Endpoints REALES: la tabla trae una linea de leyenda ("Endpoint:  <Endpoint/CID...>") y Issabel crea un
+# "dummy_endpoint" por defecto; contarlos daba 2 endpoints y un falso "ATENCION" en una instalacion limpia
+AORS=$(asterisk -rx 'pjsip show aors' 2>/dev/null | awk '/Objects found/{print $3}'); ENDP=$(asterisk -rx 'pjsip show endpoints' 2>/dev/null | awk '$1=="Endpoint:" && $2 !~ /^</ && $2 != "dummy_endpoint"{n++} END{print n+0}')
 echo "PJSIP: ${ENDP:-0} endpoints, ${AORS:-0} AOR"
 [ "${ENDP:-0}" -gt 0 ] && [ "${AORS:-0}" = "0" ] && echo "ATENCION: hay endpoints PJSIP pero ningun AOR: los telefonos no registraran. Revisa: grep -c 'Unable to set default' /var/log/asterisk/full"
 asterisk -rx 'module show' | awk 'NR>1 && /\.so/{print $1}' | sort > "$BK/modulos-despues.txt"
